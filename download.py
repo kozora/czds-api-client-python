@@ -28,6 +28,7 @@ password = config['icann.account.password']
 authen_base_url = config['authentication.base.url']
 czds_base_url = config['czds.base.url']
 tlds = config.get('tlds', [])
+excluded_tlds = config.get('excluded_tlds', [])
 
 # This is optional. Default to current directory
 working_directory = config.get('working.directory', '.') # Default to current directory
@@ -63,8 +64,35 @@ access_token = authenticate(username, password, authen_base_url)
 # Third Step: Get the download zone file links
 ##############################################################################################################
 
+# Function definition for determining if a TLD should be downloaded
+def should_download_tld(link, tlds, excluded_tlds):
+    """
+    Determine whether to download the zone file for a particular TLD
+    
+    Args:
+        link: zone file links
+        tlds: TLD lists
+        excluded_tlds: excluded tld lists
+    
+    Returns:
+        bool: True means download,False means don't download
+    """
+    # Extract the TLD name from the link
+    if not link.endswith('.zone'):
+        return False
+    
+    tld = link.rsplit('/', 1)[-1].replace('.zone', '')
+    
+    # If a list of TLDs is specified, download only the TLDs in the list
+    if len(tlds) > 0:
+        return tld in tlds
+    
+    # If no TLD list is specified, download all TLDs but exclude those in excluded_tlds
+    return tld not in excluded_tlds
+
+
 # Function definition for listing the zone links
-def get_zone_links(czds_base_url):
+def get_zone_links(czds_base_url, tlds, excluded_tlds):
     global  access_token
 
     links_url = czds_base_url + "/czds/downloads/links"
@@ -74,19 +102,26 @@ def get_zone_links(czds_base_url):
 
     if status_code == 200:
         zone_links = links_response.json()
-        print("{0}: The number of zone files to be downloaded is {1}".format(datetime.datetime.now(),len(tlds) or len(zone_links)))
+        
+        # Calculate the actual number of files to download (considering tlds and excluded_tlds)
+        actual_download_count = 0
+        for link in zone_links:
+            if should_download_tld(link, tlds, excluded_tlds):
+                actual_download_count += 1
+        
+        print("{0}: The number of zone files to be downloaded is {1}".format(datetime.datetime.now(), actual_download_count))
         return zone_links
     elif status_code == 401:
         print("The access_token has been expired. Re-authenticate user {0}".format(username))
         access_token = authenticate(username, password, authen_base_url)
-        get_zone_links(czds_base_url)
+        get_zone_links(czds_base_url, tlds, excluded_tlds)
     else:
         sys.stderr.write("Failed to get zone links from {0} with error code {1}\n".format(links_url, status_code))
         return None
 
 
 # Get the zone links
-zone_links = get_zone_links(czds_base_url)
+zone_links = get_zone_links(czds_base_url, tlds, excluded_tlds)
 if not zone_links:
     exit(1)
 
@@ -148,11 +183,7 @@ def download_zone_files(urls, working_directory):
 
     # Download the zone files one by one
     for link in urls:
-        if len(tlds):
-            for tld in tlds:
-                if link.endswith('%s.zone' % tld):
-                    download_one_zone(link, output_directory)
-        else:
+        if should_download_tld(link, tlds, excluded_tlds):
             download_one_zone(link, output_directory)
 
 # Finally, download all zone files
@@ -161,3 +192,4 @@ download_zone_files(zone_links, working_directory)
 end_time = datetime.datetime.now()
 
 print("{0}: DONE DONE. Completed downloading all zone files. Time spent: {1}".format(str(end_time), (end_time-start_time)))
+

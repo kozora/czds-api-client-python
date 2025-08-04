@@ -5,5 +5,8 @@
   "czds.base.url": "https://czds-api.icann.org",
   "working.directory": "/where/zonefiles/will/be/saved",
   "_comment": "Optional tlds: to specify a subset of tlds to download. Missing or empty [] means downloading all APPROVED tlds.",
-  "tlds": []
+  "tlds": [],
+  "_comment2": "Optional excluded_tlds: to specify tlds to exclude from download when tlds is empty. Only works when tlds is empty or not specified.",
+  "excluded_tlds": ["example", "test", "sample"]
+
 }
